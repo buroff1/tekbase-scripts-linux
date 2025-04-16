@@ -1,198 +1,177 @@
-#! /bin/bash
+#!/bin/bash
 
-# TekLabs TekBase
-# Copyright since 2005 TekLab
-# Christian Frankenstein
-# Website: teklab.de
-#          teklab.net
+# TekLabs TekBase - Unified App Control Script
+# Maintainer: Christian Frankenstein (TekLab)
+# Website: teklab.de / teklab.net
 
-VAR_A=$1
-VAR_B=$2
-VAR_C=$3
-VAR_D=$4
-VAR_E=$5
-VAR_F=$6
-VAR_G=$7
-VAR_H=$8
+VAR_A="$1"  # Action
+VAR_B="$2"  # User
+VAR_C="$3"  # ID
+VAR_D="$4"  # Path
+VAR_E="$5"  # Shortcut or container name (e.g., docker-minecraft)
+VAR_F="$6"  # Start command
+VAR_G="$7"  # PID file (optional)
+VAR_H="$8"  # Process name for PID (optional)
 
-if [ "$VAR_A" = "" ]; then
-    ./tekbase
-fi
-
+# Setup
+LOGP=$(cd "$(dirname "$0")" && pwd)
 LOGF=$(date +"%Y_%m")
-LOGP=$(pwd)
+LOGFILE="$LOGP/logs/$LOGF.txt"
+RESTART_PATH="$LOGP/restart"
+INCLUDES_PATH="$LOGP/includes/stop"
 
-if [ ! -d logs ]; then
-    mkdir logs
-    chmod 0777 logs
-fi
-if [ ! -d restart ]; then
-    mkdir restart
-    chmod 0777 restart
-fi
+mkdir -p "$LOGP/logs" "$RESTART_PATH"
+chmod 0777 "$LOGP/logs" "$RESTART_PATH"
+touch "$LOGFILE"
+chmod 0666 "$LOGFILE"
 
-if [ ! -f "logs/$LOGF.txt" ]; then
-    echo "***TekBASE Script Log***" >> $LOGP/logs/$LOGF.txt
-    chmod 0666 $LOGP/logs/$LOGF.txt
-fi
+log_msg() {
+    echo "$(date) - $1" >> "$LOGFILE"
+}
 
-#VAR_B USER
-#VAR_C ID
-#VAR_D PFAD
-#VAR_E SHORTCUT
-#VAR_F STARTBEFEHL
-#VAR_G PIDFILE
-#VAR_H PIDFILE 2
+is_docker() {
+    [[ "$VAR_E" == docker-* ]]
+}
 
-if [ "$VAR_A" = "start" ]; then
-    if [ -f $LOGP/restart/$VAR_B-apps-$VAR_C ]; then
-	rm $LOGP/restart/$VAR_B-apps-$VAR_C
-    fi
-    echo "#! /bin/bash" >> $LOGP/restart/$VAR_B-apps-$VAR_C
-    if [ "$VAR_G" = "" ]; then
-	echo "check=\`ps aux | grep -v grep | grep -i screen | grep -i \"apps$VAR_C-X\"\`" >> $LOGP/restart/$VAR_B-apps-$VAR_C
+kill_process() {
+    if is_docker; then
+        docker stop "${VAR_E#docker-}" >/dev/null 2>&1
+    elif [ -n "$VAR_G" ] && [ -f "$VAR_G" ]; then
+        check=$(ps -p "$(cat "$VAR_G")" | grep -i "$VAR_H")
+        [ -n "$check" ] && kill -9 "$(cat "$VAR_G")" && rm -f "$VAR_G"
     else
-	echo "if [ -f /home/$VAR_B/apps/$VAR_C/$VAR_G ]; then" >> $LOGP/restart/$VAR_B-apps-$VAR_C
-	echo "check=\`ps -p \`cat /home/$VAR_B/apps/$VAR_C/$VAR_G\`\`" >> $LOGP/restart/$VAR_B-apps-$VAR_C
-	echo "fi" >> $LOGP/restart/$VAR_B-apps-$VAR_C
+        pkill -f "screen.*apps$VAR_C-X"
+        screen -wipe > /dev/null 2>&1
     fi
-    echo "if [ ! -n \"\$check\" ]; then" >> $LOGP/restart/$VAR_B-apps-$VAR_C
-    echo "cd $LOGP;sudo -u $VAR_B ./apps 'start' '$VAR_B' '$VAR_C' '$VAR_D' '$VAR_E' '$VAR_F' '$VAR_G' '$VAR_H'" >> $LOGP/restart/$VAR_B-apps-$VAR_C
-    echo "fi" >> $LOGP/restart/$VAR_B-apps-$VAR_C
-    echo "exit 0" >> $LOGP/restart/$VAR_B-apps-$VAR_C
-    chmod 0755 $LOGP/restart/$VAR_B-apps-$VAR_C
+}
 
-    cd /home/$VAR_B/apps/$VAR_D
+start_process() {
+    cd "/home/$VAR_B/apps/$VAR_D" || exit 1
 
-    if [ "$VAR_G" = "" ]; then
-	kill -9 $(ps aux | grep -v grep | grep -i screen | grep -i "apps$VAR_C-X" | awk '{print $2}')
-	check=$(ps aux | grep -v grep | grep -i screen | grep -i "apps$VAR_C-X")
-	screen -wipe
-	if [ ! -n "$check" ]; then
-	    screen -A -m -d -S apps$VAR_C-X $VAR_F
-	    check=$(ps aux | grep -v grep | grep -i screen | grep -i "apps$VAR_C-X")
-	    if [ -n "$check" ]; then
-		echo "$(date) - App /home/$VAR_B/apps/$VAR_D was started ($VAR_F)" >> $LOGP/logs/$LOGF.txt
-		echo "ID1"
-	    else
-		echo "$(date) - App /home/$VAR_B/apps/$VAR_D cant be started ($VAR_F)" >> $LOGP/logs/$LOGF.txt
-		echo "ID2"
-	    fi
-	else
-	    echo "$(date) - App /home/$VAR_B/apps/$VAR_D cant be stopped and restarted ($VAR_F)" >> $LOGP/logs/$LOGF.txt
-	    echo "ID3"
-	fi
+    if is_docker; then
+        docker start "${VAR_E#docker-}" >/dev/null 2>&1
+        sleep 2
+        check=$(docker ps | grep "${VAR_E#docker-}")
+    elif [ -z "$VAR_G" ]; then
+        pkill -f "screen.*apps$VAR_C-X"
+        screen -wipe
+        screen -A -m -d -S "apps$VAR_C-X" $VAR_F
+        check=$(ps aux | grep -v grep | grep -i "apps$VAR_C-X")
     else
-	if [ -f $VAR_G ]; then
-	    check=$(ps -p $(cat $VAR_G) | grep -i "$VAR_H")
-	    if [ -n "$check" ]; then
-		kill -9 $(cat $VAR_G)
-	    fi
-	    check=$(ps -p $(cat $VAR_G) | grep -i "$VAR_H")
-	    rm $VAR_G
-	fi
-	if [ ! -n "$check" ]; then
-	    $VAR_F
-	    sleep 2
-	    if [ -f $VAR_G ]; then
-		echo "$(date) - App /home/$VAR_B/apps/$VAR_D was started ($VAR_F)" >> $LOGP/logs/$LOGF.txt
-		echo "ID1"
-	    else
-		echo "$(date) - App /home/$VAR_B/apps/$VAR_D cant be started ($VAR_F)" >> $LOGP/logs/$LOGF.txt
-		echo "ID2"
-	    fi
-	else
-	    echo "$(date) - App /home/$VAR_B/apps/$VAR_D cant be stopped and restarted ($VAR_F)" >> $LOGP/logs/$LOGF.txt
-	    echo "ID3"
-	fi
-    fi
-fi
-
-if [ "$VAR_A" = "stop" ]; then
-    if [ -f $LOGP/restart/$VAR_B-apps-$VAR_C ]; then
-	rm $LOGP/restart/$VAR_B-apps-$VAR_C
+        $VAR_F
+        sleep 2
+        check=$( [ -f "$VAR_G" ] && ps -p "$(cat "$VAR_G")" | grep -i "$VAR_H" )
     fi
 
-    cd /home/$VAR_B/apps/$VAR_D
-
-    if [ -f $LOGP/includes/stop/$VAR_E ]; then
-	check=$($LOGP/includes/stop/$VAR_E "$VAR_B" "$VAR_C" "$VAR_D" "$VAR_E" "$VAR_F" "$VAR_G" "$VAR_H")
+    if [ -n "$check" ]; then
+        log_msg "App /home/$VAR_B/apps/$VAR_D was started ($VAR_F)"
+        echo "ID1"
     else
-        if [ "$VAR_G" = "" ]; then
-	    kill -9 $(ps aux | grep -v grep | grep -i screen | grep -i "apps$VAR_C-X" | awk '{print $2}')
-	    check=$(ps aux | grep -v grep | grep -i screen | grep -i "apps$VAR_C-X")
-	    screen -wipe
+        log_msg "App /home/$VAR_B/apps/$VAR_D failed to start ($VAR_F)"
+        echo "ID2"
+    fi
+}
+
+stop_process() {
+    if [ -f "$INCLUDES_PATH/$VAR_E" ]; then
+        check=$("$INCLUDES_PATH/$VAR_E" "$VAR_B" "$VAR_C" "$VAR_D" "$VAR_E" "$VAR_F" "$VAR_G" "$VAR_H")
+    else
+        kill_process
+        if is_docker; then
+            check=$(docker ps | grep "${VAR_E#docker-}")
         else
-	    if [ -f $VAR_G ]; then
-	        check=$(ps -p $(cat $VAR_G) | grep -i "$VAR_F")
-	        if [ -n "$check" ]; then
-	            kill -9 $(cat $VAR_G)
-	        fi
-	        check=$(ps -p $(cat $VAR_G) | grep -i "$VAR_F")
-	        rm $VAR_G
-            fi
+            check=$(pgrep -f "apps$VAR_C-X")
         fi
     fi
 
-    if [ ! -n "$check" ]; then
-	echo "$(date) - App /home/$VAR_B/apps/$VAR_D was stopped" >> $LOGP/logs/$LOGF.txt
-	echo "ID1"
+    if [ -z "$check" ]; then
+        log_msg "App /home/$VAR_B/apps/$VAR_D was stopped"
+        echo "ID1"
     else
-	echo "$(date) - App /home/$VAR_B/apps/$VAR_D cant be stopped" >> $LOGP/logs/$LOGF.txt
-	echo "ID2"
-    fi
-fi
-
-if [ "$VAR_A" = "content" ]; then
-    cd /home/$VAR_B/apps/$VAR_D
-    check=$(cat $VAR_E)
-    for LINE in $check
-    do
-    	echo "$LINE%TEND%"
-    done
-fi
-
-if [ "$VAR_A" = "update" ]; then
-    check=$(ps aux | grep -v grep | grep -i screen | grep -i "$VAR_B$VAR_D-X")
-    if [ ! -n "$check" ]; then
-	screen -A -m -d -S b$VAR_B$VAR_D-X ./apps updaterun "$VAR_B" "$VAR_C" "$VAR_D" "$VAR_E"
-    	echo "ID1"
-    else
-        echo "$(date) - Update of /home/$VAR_B/apps/$VAR_D cant be installed" >> $LOGP/logs/$LOGF.txt
+        log_msg "App /home/$VAR_B/apps/$VAR_D failed to stop"
         echo "ID2"
     fi
-fi
+}
 
-if [ "$VAR_A" = "updaterun" ]; then
-    sleep 2
-    cd /home/$VAR_B/apps/$VAR_D
-    comlist=$(echo "${VAR_E//;/$'\n'}")
-    while read LINE
-    do
-    	if [ "$LINE" != "" ]; then
-	    $LINE
-	fi
-    done < <(echo "$comlist")
-    echo "$(date) - Update of /home/$VAR_B/apps/$VAR_D was installed" >> $LOGP/logs/$LOGF.txt
+create_restart_script() {
+    local restart_file="$RESTART_PATH/$VAR_B-apps-$VAR_C"
+    cat <<EOF > "$restart_file"
+#!/bin/bash
+$( is_docker && echo "check=\$(docker ps | grep '${VAR_E#docker-}')" || \
+   [ -z "$VAR_G" ] && echo "check=\$(pgrep -f 'screen.*apps$VAR_C-X')" || \
+   echo "if [ -f /home/$VAR_B/apps/$VAR_C/$VAR_G ]; then check=\$(ps -p \$(cat /home/$VAR_B/apps/$VAR_C/$VAR_G)); fi" )
+if [ -z "\$check" ]; then
+    cd "$LOGP"
+    sudo -u "$VAR_B" ./apps start "$VAR_B" "$VAR_C" "$VAR_D" "$VAR_E" "$VAR_F" "$VAR_G" "$VAR_H"
 fi
+exit 0
+EOF
+    chmod 0755 "$restart_file"
+}
 
-if [ "$VAR_A" = "online" ]; then
-    check=$(ps aux | grep -v grep | grep -i screen | grep -i "apps$VAR_C-X")
-    if [ -n "$check" ]; then
-	echo "ID1"
-    else
-	echo "ID2"
-    fi
-fi
+case "$VAR_A" in
+    "")
+        ./tekbase
+        ;;
 
+    "start")
+        rm -f "$RESTART_PATH/$VAR_B-apps-$VAR_C"
+        create_restart_script
+        start_process
+        ;;
 
-if [ "$VAR_A" = "status" ]; then
-    check=$(ps aux | grep -v grep | grep -i screen | grep -i "$VAR_E$VAR_B$VAR_D-X")
-    if [ ! -n "$check" ]; then
-	echo "ID1"
-    else
-	echo "ID2"
-    fi
-fi
+    "stop")
+        rm -f "$RESTART_PATH/$VAR_B-apps-$VAR_C"
+        cd "/home/$VAR_B/apps/$VAR_D" || exit 1
+        stop_process
+        ;;
+
+    "content")
+        cd "/home/$VAR_B/apps/$VAR_D" || exit 1
+        while IFS= read -r LINE; do
+            echo "$LINE%TEND%"
+        done < "$VAR_E"
+        ;;
+
+    "update")
+        if ! pgrep -f "screen.*$VAR_B$VAR_D-X" > /dev/null; then
+            screen -A -m -d -S "b$VAR_B$VAR_D-X" ./apps updaterun "$VAR_B" "$VAR_C" "$VAR_D" "$VAR_E"
+            echo "ID1"
+        else
+            log_msg "Update of /home/$VAR_B/apps/$VAR_D could not be installed (already running)"
+            echo "ID2"
+        fi
+        ;;
+
+    "updaterun")
+        cd "/home/$VAR_B/apps/$VAR_D" || exit 1
+        IFS=';' read -ra commands <<< "$VAR_E"
+        for cmd in "${commands[@]}"; do
+            [ -n "$cmd" ] && eval "$cmd"
+        done
+        log_msg "Update of /home/$VAR_B/apps/$VAR_D was installed"
+        ;;
+
+    "online")
+        if is_docker; then
+            docker ps | grep -q "${VAR_E#docker-}" && echo "ID1" || echo "ID2"
+        else
+            pgrep -f "screen.*apps$VAR_C-X" >/dev/null && echo "ID1" || echo "ID2"
+        fi
+        ;;
+
+    "status")
+        if is_docker; then
+            docker ps | grep -q "${VAR_E#docker-}" && echo "ID2" || echo "ID1"
+        else
+            pgrep -f "screen.*$VAR_E$VAR_B$VAR_D-X" >/dev/null || echo "ID1"
+        fi
+        ;;
+
+    *)
+        echo "Unknown action: $VAR_A"
+        exit 1
+        ;;
+esac
 
 exit 0

@@ -1,147 +1,144 @@
-#! /bin/bash
+#!/bin/bash
 
-# TekLabs TekBase
-# Copyright since 2005 TekLab
-# Christian Frankenstein
-# Website: teklab.de
-#          teklab.net
+# TekLabs TekBase - Web and MySQL Control Script
+# Maintainer: Christian Frankenstein (TekLab)
+# Website: teklab.de / teklab.net
 
-VAR_A=$1
-VAR_C=$3
-VAR_D=$4
-VAR_E=$5
+VAR_A="$1"
+VAR_B="$2"
+VAR_C="$3"
+VAR_D="$4"
+VAR_E="$5"
 
-if [ "$VAR_A" = "" ]; then
-    ./tekbase
-fi
-
+LOGP=$(cd "$(dirname "$0")" && pwd)
 LOGF=$(date +"%Y_%m")
-LOGP=$(pwd)
+LOGFILE="$LOGP/logs/$LOGF.txt"
+RESTART_PATH="$LOGP/restart"
 
-if [ ! -d logs ]; then
-    mkdir logs
-    chmod 0777 logs
-fi
-if [ ! -d restart ]; then
-    mkdir restart
-    chmod 0777 restart
-fi
+mkdir -p "$LOGP/logs" "$RESTART_PATH"
+chmod 0777 "$LOGP/logs" "$RESTART_PATH"
+touch "$LOGFILE"
+chmod 0666 "$LOGFILE"
 
-if [ ! -f "logs/$LOGF.txt" ]; then
-   echo "***TekBASE Script Log***" >> $LOGP/logs/$LOGF.txt
-   chmod 0666 $LOGP/logs/$LOGF.txt
-fi
+log_msg() {
+    echo "$(date) - $1" >> "$LOGFILE"
+}
 
+[ -z "$VAR_A" ] && ./tekbase && exit 0
 
+# -----------------------
+# Create MySQL Database
+# -----------------------
 if [ "$VAR_A" = "dbcreate" ]; then
     if [ -f /etc/mysql/settings.ini ]; then
         mysqlpwd=$(grep -i password /etc/mysql/settings.ini | awk '{print $2}')
         mysqlusr=$(grep -i login /etc/mysql/settings.ini | awk '{print $2}')
 
-        Q1="CREATE DATABASE IF NOT EXISTS $VAR_C;"
-        Q2="CREATE USER '$VAR_D'@'%' IDENTIFIED BY '$VAR_E';"
-        Q3="GRANT ALL PRIVILEGES ON $VAR_C.* TO '$VAR_D'@'%';"
-        Q4="FLUSH PRIVILEGES;"
-        SQL="${Q1}${Q2}${Q3}${Q4}"
+        SQL="CREATE DATABASE IF NOT EXISTS $VAR_C;
+             CREATE USER '$VAR_D'@'%' IDENTIFIED BY '$VAR_E';
+             GRANT ALL PRIVILEGES ON $VAR_C.* TO '$VAR_D'@'%';
+             FLUSH PRIVILEGES;"
 
-        mysql --user=$mysqlusr --password=$mysqlpwd -e "$SQL"
+        mysql --user="$mysqlusr" --password="$mysqlpwd" -e "$SQL"
         echo "ID1"
     else
         echo "ID2"
     fi
 fi
 
+# -----------------------
+# Delete MySQL Database
+# -----------------------
 if [ "$VAR_A" = "dbdelete" ]; then
     if [ -f /etc/mysql/settings.ini ]; then
         mysqlpwd=$(grep -i password /etc/mysql/settings.ini | awk '{print $2}')
         mysqlusr=$(grep -i login /etc/mysql/settings.ini | awk '{print $2}')
 
-        Q1="DROP DATABASE $VAR_C;"
-        Q2="DROP USER $VAR_D@'%';"	
-        Q3="FLUSH PRIVILEGES;"
-        SQL="${Q1}${Q2}"
+        SQL="DROP DATABASE IF EXISTS $VAR_C;
+             DROP USER IF EXISTS '$VAR_D'@'%';
+             FLUSH PRIVILEGES;"
 
-        mysql --user=$mysqlusr --password=$mysqlpwd -e "$SQL"
+        mysql --user="$mysqlusr" --password="$mysqlpwd" -e "$SQL"
         echo "ID1"
     else
-        echo "ID2"			
+        echo "ID2"
     fi
 fi
 
+# -----------------------
+# Rename MySQL Database
+# -----------------------
 if [ "$VAR_A" = "dbrename" ]; then
     if [ -f /etc/mysql/settings.ini ]; then
         mysqlpwd=$(grep -i password /etc/mysql/settings.ini | awk '{print $2}')
         mysqlusr=$(grep -i login /etc/mysql/settings.ini | awk '{print $2}')
 
-        mysqldump --user=$mysqlusr --password=$mysqlpwd $VAR_C > $VAR_C.sql
-        Q1="CREATE DATABASE IF NOT EXISTS $VAR_D;"
-        SQL="${Q1}"
-		
-        mysql --user=$mysqlusr --password=$mysqlpwd -e "$SQL"
-        mysql --user=$mysqlusr --password=$mysqlpwd $VAR_D < $VAR_C.sql		
-				
-        Q1="GRANT ALL PRIVILEGES ON $VAR_D.* TO '$VAR_E'@'%';"
-        Q2="REVOKE ALL PRIVILEGES ON $VAR_C.* FROM '$VAR_E'@'%';"
-        Q3="DROP DATABASE $VAR_C;"
-        Q4="FLUSH PRIVILEGES;"
-        SQL="${Q1}${Q2}${Q3}${Q4}"
+        mysqldump --user="$mysqlusr" --password="$mysqlpwd" "$VAR_C" > "$VAR_C.sql"
+        mysql --user="$mysqlusr" --password="$mysqlpwd" -e "CREATE DATABASE IF NOT EXISTS $VAR_D"
+        mysql --user="$mysqlusr" --password="$mysqlpwd" "$VAR_D" < "$VAR_C.sql"
 
-        mysql --user=$mysqlusr --password=$mysqlpwd -e "$SQL"
-        rm $VAR_C.sql
+        SQL="GRANT ALL PRIVILEGES ON $VAR_D.* TO '$VAR_E'@'%';
+             REVOKE ALL PRIVILEGES ON $VAR_C.* FROM '$VAR_E'@'%';
+             DROP DATABASE $VAR_C;
+             FLUSH PRIVILEGES;"
+
+        mysql --user="$mysqlusr" --password="$mysqlpwd" -e "$SQL"
+        rm -f "$VAR_C.sql"
         echo "ID1"
     else
-        echo "ID2"			
+        echo "ID2"
     fi
 fi
 
+# -----------------------
+# Change MySQL Password
+# -----------------------
 if [ "$VAR_A" = "dbpasswd" ]; then
     if [ -f /etc/mysql/settings.ini ]; then
         mysqlpwd=$(grep -i password /etc/mysql/settings.ini | awk '{print $2}')
         mysqlusr=$(grep -i login /etc/mysql/settings.ini | awk '{print $2}')
 
-        Q1="SET PASSWORD FOR '$VAR_C'@'%' = PASSWORD('$VAR_D');"
-        Q2="FLUSH PRIVILEGES;"
-        SQL="${Q1}${Q2}"
+        SQL="ALTER USER '$VAR_C'@'%' IDENTIFIED BY '$VAR_D';
+             FLUSH PRIVILEGES;"
 
-        mysql --user=$mysqlusr --password=$mysqlpwd -e "$SQL"
+        mysql --user="$mysqlusr" --password="$mysqlpwd" -e "$SQL"
         echo "ID1"
     else
-        echo "ID2"			
+        echo "ID2"
     fi
 fi
 
+# -----------------------
+# Apache VHost Management
+# -----------------------
 if [ "$VAR_A" = "activate" ]; then
-    if [ -f includes/sites/$VAR_B.conf ]; then
-        cp includes/sites/$VAR_B.conf /etc/apache2/sites-enabled
-	echo "ID1"
+    if [ -f "$LOGP/includes/sites/$VAR_B.conf" ]; then
+        cp "$LOGP/includes/sites/$VAR_B.conf" /etc/apache2/sites-enabled/
+        echo "ID1"
     else
-        echo "ID2"			
+        echo "ID2"
     fi
 fi
 
 if [ "$VAR_A" = "deactivate" ]; then
-    if [ -f /etc/apache2/sites-enabled/$VAR_B.conf ]; then
-        rm /etc/apache2/sites-enabled/$VAR_B.conf
-	echo "ID1"
+    if [ -f "/etc/apache2/sites-enabled/$VAR_B.conf" ]; then
+        rm "/etc/apache2/sites-enabled/$VAR_B.conf"
+        echo "ID1"
     else
-        echo "ID2"			
+        echo "ID2"
     fi
 fi
 
 if [ "$VAR_A" = "delete" ]; then
-    if [ -f includes/sites/$VAR_B.conf ]; then
-        rm includes/sites/$VAR_B.conf
-	if [ -f /etc/apache2/sites-enabled/$VAR_B.conf ]; then
-            rm /etc/apache2/sites-enabled/$VAR_B.conf
-	fi
-	echo "ID1"
-    else
-        echo "ID2"			
-    fi
+    removed="no"
+    [ -f "$LOGP/includes/sites/$VAR_B.conf" ] && rm "$LOGP/includes/sites/$VAR_B.conf" && removed="yes"
+    [ -f "/etc/apache2/sites-enabled/$VAR_B.conf" ] && rm "/etc/apache2/sites-enabled/$VAR_B.conf" && removed="yes"
+
+    [ "$removed" = "yes" ] && echo "ID1" || echo "ID2"
 fi
 
 if [ "$VAR_A" = "apache" ]; then
-    /etc/init.d/apache2 reload
+    systemctl reload apache2 2>/dev/null || /etc/init.d/apache2 reload
     echo "ID1"
 fi
 

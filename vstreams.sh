@@ -1,126 +1,141 @@
-#! /bin/bash
+#!/bin/bash
 
-# TekLabs TekBase
-# Copyright since 2005 TekLab
-# Christian Frankenstein
-# Website: teklab.de
-#          teklab.net
+# TekLabs TekBase - Video Streams Controller Script (Screen + Docker)
+# Maintainer: Christian Frankenstein (TekLab)
+# Website: teklab.de / teklab.net
 
-VAR_A=$1
-VAR_B=$2
-VAR_C=$3
-VAR_D=$4
-VAR_E=$5
-VAR_F=$6
-VAR_G=$7
+VAR_A="$1"  # Action
+VAR_B="$2"  # User
+VAR_C="$3"  # Stream ID
+VAR_D="$4"  # Path
+VAR_E="$5"  # App name OR Docker container name
+VAR_F="$6"  # Start script (for screen)
+VAR_G="$7"  # Base port
 
-if [ "$VAR_A" = "" ]; then
-    ./tekbase
-fi
-
+# Setup logging
+LOGP=$(cd "$(dirname "$0")" && pwd)
 LOGF=$(date +"%Y_%m")
-LOGP=$(pwd)
+LOGFILE="$LOGP/logs/$LOGF.txt"
+RESTART_PATH="$LOGP/restart"
 
-if [ ! -d logs ]; then
-    mkdir logs
-    chmod 0777 logs
-fi
-if [ ! -d restart ]; then
-    mkdir restart
-    chmod 0777 restart
-fi
+mkdir -p "$LOGP/logs" "$RESTART_PATH"
+chmod 0777 "$LOGP/logs" "$RESTART_PATH"
+touch "$LOGFILE"
+chmod 0666 "$LOGFILE"
 
-if [ ! -f "logs/$LOGF.txt" ]; then
-    echo "***TekBASE Script Log***" >> $LOGP/logs/$LOGF.txt
-    chmod 0666 $LOGP/logs/$LOGF.txt
-fi
+log_msg() {
+    echo "$(date) - $1" >> "$LOGFILE"
+}
 
-#VAR_A typ
-#VAR_B USER
-#VAR_C ID
-#VAR_D PATH
-#VAR_E APP
-#VAR_F STARTSCRIPT
-#VAR_G PORT
+is_docker() {
+    [[ "$VAR_E" == docker-* ]]
+}
+
+get_container_name() {
+    echo "${VAR_E#docker-}"
+}
+
+[ -z "$VAR_A" ] && ./tekbase && exit 0
 
 if [ "$VAR_A" = "start" ]; then
-    if [ -f $LOGP/restart/$VAR_B-vstreams-$VAR_C ]; then
-	rm $LOGP/restart/$VAR_B-vstreams-$VAR_C
-    fi
-    echo "#! /bin/bash" >> $LOGP/restart/$VAR_B-vstreams-$VAR_C
-    echo "check=\`ps aux | grep -v grep | grep -i screen | grep -i \"vstreams$VAR_C-X\"\`" >> $LOGP/restart/$VAR_B-server-$VAR_C
-    echo "if [ ! -n \"\$check\" ]; then" >> $LOGP/restart/$VAR_B-vstreams-$VAR_C
-    echo "cd $LOGP;sudo -u $VAR_B ./vstreams 'start' '$VAR_B' '$VAR_C' '$VAR_D' '$VAR_E' '$VAR_F' '$VAR_G'" >> $LOGP/restart/$VAR_B-vstreams-$VAR_C
-    echo "fi" >> $LOGP/restart/$VAR_B-vstreams-$VAR_C
-    echo "exit 0" >> $LOGP/restart/$VAR_B-vstreams-$VAR_C
-    chmod 0755 $LOGP/restart/$VAR_B-vstreams-$VAR_C
+    restart_script="$RESTART_PATH/$VAR_B-vstreams-$VAR_C"
+    rm -f "$restart_script"
 
-    cd /home/$VAR_B/vstreams/$VAR_D
+    cat <<EOF > "$restart_script"
+#!/bin/bash
+$(is_docker && echo "check=\$(docker ps | grep -i \$(get_container_name))" || echo "check=\$(pgrep -f \"screen.*vstreams$VAR_C-X\")")
+if [ -z "\$check" ]; then
+    cd "$LOGP"
+    sudo -u "$VAR_B" ./vstreams start "$VAR_B" "$VAR_C" "$VAR_D" "$VAR_E" "$VAR_F" "$VAR_G"
+fi
+exit 0
+EOF
+    chmod 0755 "$restart_script"
 
-    kill -9 $(ps aux | grep -v grep | grep -i screen | grep -i "$VAR_F$VAR_B-X" | awk '{print $2}')
-    check=$(ps aux | grep -v grep | grep -i screen | grep -i "$VAR_F$VAR_B-X")
-    screen -wipe
-    if [ ! -n "$check" ]; then
-	let httpp=$VAR_G+40
-	let httpsp=$VAR_G+30
-	let rtmptp=$VAR_G+20
-	let mrtmpp=$VAR_G+10
-	let proxyp=$VAR_G+1
-	cd conf
-	sed -e '/http.port=/Ic\http.port='$httpp'' red5.properties > red5.backup
-	sed -e '/rtmp.port=/Ic\rtmp.port='$VAR_G'' red5.backup > red5.properties
-	sed -e '/rtmpt.port=/Ic\rtmpt.port='$rtmptp'' red5.properties > red5.backup
-	sed -e '/mrtmp.port=/Ic\mrtmpp.port='$mrtmpp'' red5.backup > red5.properties
-	sed -e '/proxy.source_port=/Ic\proxy.source_port='$proxyp'' red5.properties > red5.backup
-	sed -e '/proxy.destination_port=/Ic\proxy.destination_port='$VAR_G'' red5.backup > red5.properties
-	sed -e '/https.port=/Ic\https.port='$httpsp'' red5.properties > red5.backup
-	rm red5.properties
-	mv red5.backup red5.properties
-	cd /home/$VAR_C/vstreams/$VAR_D
-    
-    	screen -A -m -d -S vstreams$VAR_C-X $VAR_F
-	check=$(ps aux | grep -v grep | grep -i screen | grep -i "vstreams$VAR_C-X")
-
-	if [ -n "$check" ]; then
-	    echo "$(date) - Stream /home/$VAR_B/vstreams/$VAR_D was started ($VAR_F)" >> $LOGP/logs/$LOGF.txt
-	    echo "ID1"
-	else
-	    echo "$(date) - Stream /home/$VAR_B/vstreams/$VAR_D cant be started ($VAR_F)" >> $LOGP/logs/$LOGF.txt
-	    echo "ID2"
-	fi
+    if is_docker; then
+        container=$(get_container_name)
+        docker start "$container"
+        sleep 2
+        if docker ps | grep -q "$container"; then
+            log_msg "Docker stream container '$container' was started"
+            echo "ID1"
+        else
+            log_msg "Docker stream container '$container' failed to start"
+            echo "ID2"
+        fi
     else
-	echo "$(date) - Stream /home/$VAR_B/vstreams/$VAR_D cant be stopped and restarted ($VAR_F)" >> $LOGP/logs/$LOGF.txt
-	echo "ID3"
+        cd "/home/$VAR_B/vstreams/$VAR_D" || exit 1
+        pkill -f "screen.*$VAR_F$VAR_B-X"
+        screen -wipe
+
+        if ! pgrep -f "screen.*$VAR_F$VAR_B-X" > /dev/null; then
+            let httpp=VAR_G+40
+            let httpsp=VAR_G+30
+            let rtmptp=VAR_G+20
+            let mrtmpp=VAR_G+10
+            let proxyp=VAR_G+1
+
+            cd conf || exit 1
+            sed -i.bak -e "s/^http.port=.*/http.port=$httpp/" \
+                       -e "s/^rtmp.port=.*/rtmp.port=$VAR_G/" \
+                       -e "s/^rtmpt.port=.*/rtmpt.port=$rtmptp/" \
+                       -e "s/^mrtmp.port=.*/mrtmp.port=$mrtmpp/" \
+                       -e "s/^proxy.source_port=.*/proxy.source_port=$proxyp/" \
+                       -e "s/^proxy.destination_port=.*/proxy.destination_port=$VAR_G/" \
+                       -e "s/^https.port=.*/https.port=$httpsp/" red5.properties
+
+            cd "/home/$VAR_B/vstreams/$VAR_D" || exit 1
+            screen -A -m -d -S "vstreams$VAR_C-X" "$VAR_F"
+            if pgrep -f "screen.*vstreams$VAR_C-X" > /dev/null; then
+                log_msg "Screen-based stream /home/$VAR_B/vstreams/$VAR_D was started ($VAR_F)"
+                echo "ID1"
+            else
+                log_msg "Screen-based stream /home/$VAR_B/vstreams/$VAR_D failed to start ($VAR_F)"
+                echo "ID2"
+            fi
+        else
+            log_msg "Stream already running, could not restart ($VAR_F)"
+            echo "ID3"
+        fi
     fi
 fi
 
 if [ "$VAR_A" = "stop" ]; then
-    if [ -f $LOGP/restart/$VAR_B-vstreams-$VAR_C ]; then
-	rm $LOGP/restart/$VAR_B-vstreams-$VAR_C
-    fi
+    rm -f "$RESTART_PATH/$VAR_B-vstreams-$VAR_C"
 
-    kill -9 $(ps aux | grep -v grep | grep -i screen | grep -i "vstreams$VAR_C-X" | awk '{print $2}')
-    check=$(ps aux | grep -v grep | grep -i screen | grep -i "vstreams$VAR_C-X")
-    screen -wipe
-
-    if [ ! -n "$check" ]; then
-	echo "$(date) - Stream /home/$VAR_B/vstreams/$VAR_D was stopped" >> $LOGP/logs/$LOGF.txt
-	echo "ID1"
+    if is_docker; then
+        container=$(get_container_name)
+        docker stop "$container"
+        sleep 1
+        if ! docker ps | grep -q "$container"; then
+            log_msg "Docker stream container '$container' was stopped"
+            echo "ID1"
+        else
+            log_msg "Docker stream container '$container' could not be stopped"
+            echo "ID2"
+        fi
     else
-	echo "$(date) - Stream /home/$VAR_B/vstreams/$VAR_D cant be stopped" >> $LOGP/logs/$LOGF.txt
-	echo "ID2"
+        pkill -f "screen.*vstreams$VAR_C-X"
+        screen -wipe
+        if ! pgrep -f "screen.*vstreams$VAR_C-X" > /dev/null; then
+            log_msg "Stream /home/$VAR_B/vstreams/$VAR_D was stopped"
+            echo "ID1"
+        else
+            log_msg "Stream /home/$VAR_B/vstreams/$VAR_D could not be stopped"
+            echo "ID2"
+        fi
     fi
 fi
-
 
 if [ "$VAR_A" = "content" ]; then
-    cd /home/$VAR_B/vstreams/$VAR_D
-    check=$(cat $VAR_E)
-    for LINE in $check
-    do
-    	echo "$LINE%TEND%"
-    done
+    cd "/home/$VAR_B/vstreams/$VAR_D" || exit 1
+    if [ -f "$VAR_E" ]; then
+        while IFS= read -r LINE; do
+            echo "$LINE%TEND%"
+        done < "$VAR_E"
+    else
+        echo "File not found: $VAR_E"
+    fi
 fi
-
 
 exit 0

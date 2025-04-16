@@ -1,24 +1,38 @@
-#! /bin/bash
+#!/bin/bash
 
-# TekLabs TekBase
-# Copyright since 2005 TekLab
-# Christian Frankenstein
-# Website: teklab.de
-#          teklab.net
+# TekLabs TekBase - Modernized User & Server Management Script
+# Maintainer: Christian Frankenstein
+# Updated: 2025-04-16
 
+# Parameters
+VAR_A="$1"
+VAR_B="$2"
+VAR_C="$3"
+VAR_D="$4"
+VAR_E="$5"
+VAR_F="$6"
+VAR_G="$7"
+VAR_H="$8"
+VAR_I="$9"
+VAR_J="${10}"
 
-VAR_A=$1
-VAR_B=$2
-VAR_C=$3
-VAR_D=$4
-VAR_E=$5
-VAR_F=$6
-VAR_G=$7
-VAR_H=$8
-VAR_I=$9
-VAR_J=${10}
+# Setup Paths and Logging
+LOGP=$(cd "$(dirname "$0")" && pwd)
+LOGF=$(date +"%Y_%m")
+LOGC=$(date +"%Y_%m-%H_%M_%S")
+LOGFILE="$LOGP/logs/$LOGF.txt"
 
-if [ "$VAR_A" = "" ]; then
+mkdir -p "$LOGP/logs" "$LOGP/restart" "$LOGP/startscripte" "$LOGP/cache"
+chmod -R 0777 "$LOGP/logs" "$LOGP/restart" "$LOGP/startscripte" "$LOGP/cache"
+touch "$LOGFILE"
+chmod 0666 "$LOGFILE"
+
+log_msg() {
+    echo "$(date) - $1" >> "$LOGFILE"
+}
+
+# Info header for default run
+if [ -z "$VAR_A" ]; then
     LOGY=$(date +"%Y")
     clear
     echo "###########################################"
@@ -29,610 +43,521 @@ if [ "$VAR_A" = "" ]; then
     echo "#          www.teklab.us                  #"
     echo "###########################################"
 fi
-
-LOGF=$(date +"%Y_%m")
-LOGC=$(date +"%Y_%m-%H_%M_%S")
-LOGP=$(pwd)
-
-if [ ! -d logs ]; then
-    mkdir logs
-    chmod 0777 logs
-fi
-if [ ! -d restart ]; then
-    mkdir restart
-    chmod 0777 restart
-fi
-if [ ! -d startscripte ]; then
-    mkdir startscripte
-    chmod 0777 startscripte
-fi
-
-if [ ! -f "logs/$LOGF.txt" ]; then
-    echo "***TekBASE Script Log***" >> $LOGP/logs/$LOGF.txt
-    chmod 0666 $LOGP/logs/$LOGF.txt
-fi
-
 case "$VAR_A" in
-    # User anlegen
+    # ----------------------------
+    # Case 1: Create or update user
+    # ----------------------------
     1)
-        if [ ! -d /home/$VAR_B ] ; then 
-	    useradd -g users -p $(perl -e 'print crypt("'$VAR_C'","Sa")') -s /bin/bash -m $VAR_B -d /home/$VAR_B
-	    if [ ! -d /home/$VAR_B ]; then
-	        echo "$(date) - Error: User $VAR_B cant be created" >> $LOGP/logs/$LOGF.txt
-	        echo "ID2"
-	    else
-	        echo "$(date) - User $VAR_B was created" >> $LOGP/logs/$LOGF.txt
-	        echo "ID1"
-	    fi
+        if [ ! -d /home/"$VAR_B" ]; then
+            useradd -g users -p "$(perl -e 'print crypt("'"$VAR_C"'","Sa")')" -s /bin/bash -m "$VAR_B" -d /home/"$VAR_B"
+            if [ ! -d /home/"$VAR_B" ]; then
+                log_msg "Error: User $VAR_B could not be created"
+                echo "ID2"
+            else
+                log_msg "User $VAR_B was created"
+                echo "ID1"
+            fi
         else
-	    usermod -p $(perl -e 'print crypt("'$VAR_C'","Sa")') $VAR_B
-	    echo "$(date) - User $VAR_B was existing and changed" >> $LOGP/logs/$LOGF.txt
-	    echo "ID1"
+            usermod -p "$(perl -e 'print crypt("'"$VAR_C"'","Sa")')" "$VAR_B"
+            log_msg "User $VAR_B already existed and password was updated"
+            echo "ID1"
         fi
     ;;
-    # User bearbeiten
+
+    # ----------------------------
+    # Case 2: Change user password
+    # ----------------------------
     2)
-        usermod -p $(perl -e 'print crypt("'$VAR_C'","Sa")') $VAR_B
-        echo "$(date) - User $VAR_B was changed" >> $LOGP/logs/$LOGF.txt
+        usermod -p "$(perl -e 'print crypt("'"$VAR_C"'","Sa")')" "$VAR_B"
+        log_msg "User $VAR_B password was changed"
         echo "ID1"
     ;;
-    # User entfernen 1-2
+
+    # ----------------------------
+    # Case 3: Delete user (step 1 - initiate)
+    # ----------------------------
     3)
-        rm $LOGP/restart/$VAR_B*
-        startchk=$(ps aux | grep -v grep | grep -i screen | grep -i "d$VAR_B-X")
-        if [ ! -n "$startchk" ]; then
-	    screen -A -m -d -S d$VAR_B-X ./tekbase 4 $VAR_B $VAR_C
-	    check=$(ps aux | grep -v grep | grep -i screen | grep -i "d$VAR_B-X")
+        rm -f "$LOGP/restart/$VAR_B"*
+        screenname="d${VAR_B}-X"
+        startchk=$(pgrep -f "screen.*$screenname")
+
+        if [ -z "$startchk" ]; then
+            screen -A -m -d -S "$screenname" "$0" 4 "$VAR_B" "$VAR_C"
+            sleep 1
+            check=$(pgrep -f "screen.*$screenname")
         fi
-        if [ ! -n "$check" ]; then
-	    if [ ! -d /home/$VAR_B ]; then
-	        echo "$(date) - User $VAR_B was deleted" >> $LOGP/logs/$LOGF.txt
-	        echo "ID1"
-	    else
-	        echo "$(date) - Error: User $VAR_B cant be deleted" >> $LOGP/logs/$LOGF.txt
-	        echo "ID2"
-	    fi
+
+        if [ -z "$check" ]; then
+            if [ ! -d /home/"$VAR_B" ]; then
+                log_msg "User $VAR_B was deleted"
+                echo "ID1"
+            else
+                log_msg "Error: User $VAR_B could not be deleted"
+                echo "ID2"
+            fi
         else
-	    echo "$(date) - User $VAR_B was deleted" >> $LOGP/logs/$LOGF.txt
-	    echo "ID1"
+            log_msg "User $VAR_B deletion screen started"
+            echo "ID1"
         fi
     ;;
-    # User entfernen 2-2
+
+    # ----------------------------
+    # Case 4: Delete user (step 2 - deep clean)
+    # ----------------------------
     4)
         counter=0
         deleteall=0
         if [ "$VAR_C" != "all" ]; then
-	    while [ $counter != 1 ]; do
-	        totalcount=0
-	        cd /home/$VAR_B
-	        if [ -d apps ]; then
-		    cd apps
-		    acounter=$(find -type d | wc -l)
-		    if [ "$acounter" != "1" ]; then
-		        totalcount=1
-		    fi
-		    cd ..
-	        fi
-	        if [ -d server ]; then
-		    cd server
-		    scounter=$(find -type d | wc -l)
-	            if [ "$scounter" != "1" ]; then
-		        totalcount=1
-		    fi
-		    cd ..
-	        fi
-	        if [ -d streams ]; then
-		    cd streams
-		    sscounter=$(find -type d | wc -l)
-		    if [ "$sscounter" != "1" ]; then
-		        totalcount=1
-		    fi
-		    cd ..
-	        fi
-	        if [ -d voice ]; then
-		    cd voice
-		    vcounter=$(find -type d | wc -l)
-		    if [ "$vcounter" != "1" ]; then
-		        totalcount=1
-		    fi
-		    cd ..
-	        fi
-	        if [ -d vstreams ]; then
-		    cd vstreams
-		    vscounter=$(find -type d | wc -l)
-		    if [ "$vscounter" != "1" ]; then
-		        totalcount=1
-		    fi
-		    cd ..
-	        fi
-	        if [ "$totalcount" = "1" ]; then
-		    sleep 5
-		    let deleteall=$deleteall+1
-	        else
-		    counter=1
-	        fi
-	        if [ "$deleteall" = "5" ]; then
-		    cd /home/$VAR_B
-		    rm -r *
-		    counter=1
-	        fi
-	    done
+            while [ "$counter" -ne 1 ]; do
+                totalcount=0
+                cd /home/"$VAR_B" || break
+
+                for folder in apps server streams voice vstreams; do
+                    if [ -d "$folder" ]; then
+                        cd "$folder" || continue
+                        subcount=$(find -type d | wc -l)
+                        [ "$subcount" -ne 1 ] && totalcount=1
+                        cd ..
+                    fi
+                done
+
+                if [ "$totalcount" -eq 1 ]; then
+                    sleep 5
+                    deleteall=$((deleteall + 1))
+                else
+                    counter=1
+                fi
+
+                if [ "$deleteall" -eq 5 ]; then
+                    cd /home/"$VAR_B" && rm -rf *
+                    counter=1
+                fi
+            done
         fi
 
-        userdel $VAR_B
-        cd /home
-        rm -r $VAR_B
-        rm -r /var/run/screen/S-$VAR_B
-        rm -r /var/run/uscreen/S-$VAR_B
+        userdel "$VAR_B"
+        rm -rf /home/"$VAR_B"
+        rm -rf /var/run/screen/S-"$VAR_B"
+        rm -rf /var/run/uscreen/S-"$VAR_B"
+        log_msg "User $VAR_B and home directory removed"
     ;;
-    # Games/Apps/Voice/Stream installieren 1-2
+    # ----------------------------
+    # Case 5: Install - Step 1 (screen launch)
+    # ----------------------------
     5)
-        startchk=$(ps aux | grep -v grep | grep -i screen | grep -i "$VAR_B$VAR_C-X")
-        if [ ! -n "$startchk" ]; then
-	    screen -A -m -d -S i$VAR_B$VAR_C-X ./tekbase 6 $VAR_B $VAR_C $VAR_D $VAR_E $VAR_F $VAR_G $VAR_H
-	    check=$(ps aux | grep -v grep | grep -i screen | grep -i "i$VAR_B$VAR_C-X")
+        screenname="i${VAR_B}${VAR_C}-X"
+        startchk=$(pgrep -f "screen.*$screenname")
+        if [ -z "$startchk" ]; then
+            screen -A -m -d -S "$screenname" "$0" 6 "$VAR_B" "$VAR_C" "$VAR_D" "$VAR_E" "$VAR_F" "$VAR_G" "$VAR_H"
+            sleep 1
+            check=$(pgrep -f "screen.*$screenname")
         fi
-        if [ ! -n "$check" ]; then
-	    if [ ! -d /home/$VAR_B/$VAR_F/$VAR_C ]; then
-	        echo "ID2"
-	    else
-	        echo "ID1"
-	    fi
+
+        if [ -z "$check" ]; then
+            [ ! -d /home/"$VAR_B"/"$VAR_F"/"$VAR_C" ] && echo "ID2" || echo "ID1"
         else
-	    echo "ID1"
+            echo "ID1"
         fi
     ;;
-    # Games/Apps/Voice/Stream installieren 2-2
+
+    # ----------------------------
+    # Case 6: Install - Step 2 (actual install)
+    # ----------------------------
     6)
-        cd /home/$VAR_B
-        su $VAR_B -c "mkdir -p $VAR_F"
-        cd $VAR_F
+        cd /home/"$VAR_B" || exit 1
+        su "$VAR_B" -c "mkdir -p '$VAR_F'"
+        cd "$VAR_F" || exit 1
+
         if [ "$VAR_G" = "delete" ]; then
-	    sleep 10
-	    rm -r $VAR_C
-	    if [ -f $VAR_C.tar ]; then
-	        rm $VAR_C.tar
-	    fi
+            sleep 10
+            rm -rf "$VAR_C"
+            [ -f "$VAR_C.tar" ] && rm "$VAR_C.tar"
         fi
-        su $VAR_B -c "mkdir $VAR_C"
-        if [ ! -d $VAR_C ]; then
-	    echo "$(date) - Folder /home/$VAR_B/$VAR_F/$VAR_C cant be created" >> $LOGP/logs/$LOGF.txt
+
+        su "$VAR_B" -c "mkdir '$VAR_C'"
+        if [ ! -d "$VAR_C" ]; then
+            log_msg "Folder /home/$VAR_B/$VAR_F/$VAR_C could not be created"
         else
-#	    if [ "$VAR_F" = "server" ]; then
-#	        passwd=`pwgen 10 1`
-#	        useradd -g users -p `perl -e 'print crypt("'$passwd'","Sa")'` -s /bin/bash $VAR_B-$VAR_C -d /home/$VAR_B/server/$VAR_C
-#	        echo "$(date) - Gameserver user $VAR_B-$VAR_C was created" >> $LOGP/logs/$LOGF.txt
-#	    fi
-	    echo "$(date) - Folder /home/$VAR_B/$VAR_F/$VAR_C was created" >> $LOGP/logs/$LOGF.txt
-#	    if [ "$VAR_G" = "protect" ]; then
-#	        chown -R $VAR_H $VAR_C
-#	        chmod 755 $VAR_C
-#	    fi
+            log_msg "Folder /home/$VAR_B/$VAR_F/$VAR_C was created"
         fi
 
-        if [ -f $VAR_G ] && [ "$VAR_G" != "" ]; then
-	    mv $VAR_G /home/$VAR_B/$VAR_F/$VAR_C/install.sh
-	    cd /home/$VAR_B/$VAR_F/$VAR_C
-	    chown $VAR_B install.sh
-	    chmod 755 install.sh
-	    su $VAR_B -c "./install.sh"
-	    rm install.sh
-	    counter=$(find -type f | wc -l)
-	    if [ "$counter" != "0" ]; then
-	        echo "$(date) - Script in $VAR_B/$VAR_F/$VAR_C was installed" >> $LOGP/logs/$LOGF.txt
-	    else
-	        echo "$(date) - Script in $VAR_B/$VAR_F/$VAR_C cant be installed" >> $LOGP/logs/$LOGF.txt
-	    fi
-	    exit 0
+        if [ -f "$VAR_G" ] && [ -n "$VAR_G" ]; then
+            mv "$VAR_G" "/home/$VAR_B/$VAR_F/$VAR_C/install.sh"
+            cd "/home/$VAR_B/$VAR_F/$VAR_C" || exit 1
+            chown "$VAR_B" install.sh
+            chmod 755 install.sh
+            su "$VAR_B" -c "./install.sh"
+            rm install.sh
+
+            counter=$(find . -type f | wc -l)
+            [ "$counter" -ne 0 ] && log_msg "Script in $VAR_B/$VAR_F/$VAR_C installed" || log_msg "Script in $VAR_B/$VAR_F/$VAR_C could not be installed"
+            exit 0
         fi
 
-        cd $LOGP
+        cd "$LOGP" || exit 1
         mkdir -p cache
-        cd cache
-        if [ ! -f $VAR_D.tar ]; then
-	    mkdir $LOGC
-	    cd $LOGC
-	    wget $VAR_E/$VAR_D.tar
-	    mv $VAR_D.tar $LOGP/cache/$VAR_D.tar
-	    cd $LOGP/cache
-	    rm -r $LOGC
+        cd cache || exit 1
+
+        if [ ! -f "$VAR_D.tar" ]; then
+            mkdir "$LOGC"
+            cd "$LOGC" || exit 1
+            wget "$VAR_E/$VAR_D.tar"
+            mv "$VAR_D.tar" "$LOGP/cache/$VAR_D.tar"
+            cd "$LOGP/cache" || exit 1
+            rm -rf "$LOGC"
         else
-	    if [ -f $VAR_B$VAR_C.md5 ]; then
-	        rm $VAR_B$VAR_C.md5
-	    fi
-	    wget -O $VAR_B$VAR_C.md5 $VAR_E/$VAR_D.tar.md5
-	    if [ -f $VAR_B$VAR_C.md5 ]; then
-	        dowmd5=$(cat $VAR_B$VAR_C.md5 | awk '{print $1}')
-	        rm $VAR_B$VAR_C.md5
-	    else
-	        dowmd5="ID2"
-	    fi
-	    chkmd5=$(md5sum $VAR_D.tar | awk '{print $1}')
-	    if [ "$dowmd5" != "$chkmd5" ]; then
-	        mkdir $LOGC
-	        cd $LOGC
-	        wget $VAR_E/$VAR_D.tar
-	        dowmd5=$(md5sum $VAR_D.tar | awk '{print $1}')
-	        if [ "$dowmd5" != "$chkmd5" ]; then
-	            mv $VAR_D.tar $LOGP/cache/$VAR_D.tar
-	        fi
-	        cd $LOGP/cache
-	        rm -r $LOGC
-	    fi
+            [ -f "$VAR_B$VAR_C.md5" ] && rm "$VAR_B$VAR_C.md5"
+            wget -O "$VAR_B$VAR_C.md5" "$VAR_E/$VAR_D.tar.md5"
+            if [ -f "$VAR_B$VAR_C.md5" ]; then
+                dowmd5=$(awk '{print $1}' "$VAR_B$VAR_C.md5")
+                rm "$VAR_B$VAR_C.md5"
+            else
+                dowmd5="ID2"
+            fi
+            chkmd5=$(md5sum "$VAR_D.tar" | awk '{print $1}')
+            if [ "$dowmd5" != "$chkmd5" ]; then
+                mkdir "$LOGC"
+                cd "$LOGC" || exit 1
+                wget "$VAR_E/$VAR_D.tar"
+                dowmd5=$(md5sum "$VAR_D.tar" | awk '{print $1}')
+                [ "$dowmd5" != "$chkmd5" ] && mv "$VAR_D.tar" "$LOGP/cache/$VAR_D.tar"
+                cd "$LOGP/cache" || exit 1
+                rm -rf "$LOGC"
+            fi
         fi
-        if [ ! -f $VAR_D.tar ]; then
-	    echo "$(date) - Image $VAR_D.tar cant be downloaded" >> $LOGP/logs/$LOGF.txt
+
+        if [ ! -f "$VAR_D.tar" ]; then
+            log_msg "Image $VAR_D.tar could not be downloaded"
         else
-	    echo "$(date) - Image $VAR_D.tar was downloaded" >> $LOGP/logs/$LOGF.txt
-	    if [ "$VAR_G" = "protect" ]; then
-	        userchk=$(grep ^$VAR_B-p: /etc/passwd | grep -i "sec")
-	        if [ "$userchk" = "" ]; then
-		    passwd=$(pwgen 8 1 -c -n)
-		    useradd -g users -p $(perl -e 'print crypt("'$passwd'","Sa")') -s /bin/bash $VAR_B-p -d /home/$VAR_B/$VAR_F/$VAR_C
-	        fi
-	        cd /home/$VAR_B/$VAR_F
-	        chown $VAR_B-p:users $VAR_C
-	        chmod 755 $VAR_C
-	        cd $LOGP/cache
-	        su $VAR_B-p -c "tar -xf $VAR_D.tar -C /home/$VAR_B/$VAR_F/$VAR_C"
-	    else
-	        su $VAR_B -c "tar -xf $VAR_D.tar -C /home/$VAR_B/$VAR_F/$VAR_C"
-	    fi
-	    
-	    cd /home/$VAR_B/$VAR_F/$VAR_C
-	    if [ -f install.sh ]; then
-	        chmod 0777 install.sh
-	        su $VAR_B -c "./install.sh"
-	        rm install.sh
-	    fi
-	    if [ "$VAR_F" = "server" ]; then
-	        cd /home/$VAR_B/$VAR_F/$VAR_C
-	        for PROTLINE in $(cat $LOGP/includes/$VAR_D/protect.inf)
-	        do
-		    if [ -f $PROTLINE ]; then
-		        chown $VAR_B-p:users $PROTLINE
-		        chmod 554 $PROTLINE
-		   fi
-	        done
-	    fi
-	    counter=$(find -type f | wc -l)
-	    if [ "$counter" != "0" ]; then
-	        echo "$(date) - Image $VAR_D.tar was installed" >> $LOGP/logs/$LOGF.txt
-	    else
-	        echo "$(date) - Image $VAR_D.tar cant be installed" >> $LOGP/logs/$LOGF.txt
-	    fi
+            log_msg "Image $VAR_D.tar was downloaded"
+            if [ "$VAR_G" = "protect" ]; then
+                userchk=$(grep "^$VAR_B-p:" /etc/passwd | grep -i sec)
+                if [ -z "$userchk" ]; then
+                    passwd=$(pwgen 8 1 -c -n)
+                    useradd -g users -p "$(perl -e 'print crypt("'"$passwd"'","Sa")')" -s /bin/bash "$VAR_B-p" -d "/home/$VAR_B/$VAR_F/$VAR_C"
+                fi
+                cd "/home/$VAR_B/$VAR_F" || exit 1
+                chown "$VAR_B-p:users" "$VAR_C"
+                chmod 755 "$VAR_C"
+                cd "$LOGP/cache" || exit 1
+                su "$VAR_B-p" -c "tar -xf $VAR_D.tar -C /home/$VAR_B/$VAR_F/$VAR_C"
+            else
+                su "$VAR_B" -c "tar -xf $VAR_D.tar -C /home/$VAR_B/$VAR_F/$VAR_C"
+            fi
+
+            cd "/home/$VAR_B/$VAR_F/$VAR_C" || exit 1
+            [ -f install.sh ] && chmod 0777 install.sh && su "$VAR_B" -c "./install.sh" && rm install.sh
+
+            if [ "$VAR_F" = "server" ]; then
+                cd "$LOGP/includes/$VAR_D" || exit 1
+                for PROTLINE in $(cat protect.inf); do
+                    [ -f "$PROTLINE" ] && chown "$VAR_B-p:users" "$PROTLINE" && chmod 554 "$PROTLINE"
+                done
+            fi
+
+            counter=$(find . -type f | wc -l)
+            [ "$counter" -ne 0 ] && log_msg "Image $VAR_D.tar installed" || log_msg "Image $VAR_D.tar could not be installed"
         fi
         sleep 2
     ;;
-    # Games/Apps/Voice/Stream deinstallieren 1-2
+
+    # ----------------------------
+    # Case 7: Deinstall - Step 1 (screen launch)
+    # ----------------------------
     7)
-        if [ -f $LOGP/restart/$VAR_B-$VAR_D-$VAR_C ]; then
-	    rm $LOGP/restart/$VAR_B-$VAR_D-$VAR_C
+        [ -f "$LOGP/restart/$VAR_B-$VAR_D-$VAR_C" ] && rm "$LOGP/restart/$VAR_B-$VAR_D-$VAR_C"
+        screenname="d${VAR_B}${VAR_C}-X"
+        startchk=$(pgrep -f "screen.*$screenname")
+
+        if [ -z "$startchk" ]; then
+            screen -A -m -d -S "$screenname" "$0" 8 "$VAR_B" "$VAR_C" "$VAR_D"
+            sleep 1
+            check=$(pgrep -f "screen.*$screenname")
         fi
-        startchk=$(ps aux | grep -v grep | grep -i screen | grep -i "$VAR_B$VAR_C-X")
-        if [ ! -n "$startchk" ]; then
-	    screen -A -m -d -S d$VAR_B$VAR_C-X ./tekbase 8 $VAR_B $VAR_C $VAR_D
-	    check=$(ps aux | grep -v grep | grep -i screen | grep -i "d$VAR_B$VAR_C-X")
-        fi
-        if [ ! -n "$check" ]; then
-	    cd /home/$VAR_B/$VAR_D
-	    if [ ! -d $VAR_C ]; then
-	        echo "ID1"
-	    else
-	        echo "ID2"
-	    fi
+
+        if [ -z "$check" ]; then
+            [ ! -d /home/"$VAR_B"/"$VAR_D"/"$VAR_C" ] && echo "ID1" || echo "ID2"
         else
-	    echo "ID1"
+            echo "ID1"
         fi
     ;;
-    # Games/Apps/Voice/Stream deinstallieren 2-2
+
+    # ----------------------------
+    # Case 8: Deinstall - Step 2
+    # ----------------------------
     8)
         sleep 10
-        cd /home/$VAR_B/$VAR_D
-        rm -r $VAR_C
+        cd /home/"$VAR_B"/"$VAR_D" || exit 1
+        rm -rf "$VAR_C"
 
-        userchk=$(grep ^$VAR_B-p: /etc/passwd | grep -i "sec")
-        if [ "$userchk" != "" ]; then
-	    killall -u $VAR_B-p
-	    sleep 10
-    	    userdel $VAR_B-p
-	    cd /home
-	    rm -r $VAR_B
-	    rm -r /var/run/screen/S-$VAR_B-p
-	    rm -r /var/run/uscreen/S-$VAR_B-p
+        userchk=$(grep "^$VAR_B-p:" /etc/passwd | grep -i sec)
+        if [ -n "$userchk" ]; then
+            killall -u "$VAR_B-p"
+            sleep 10
+            userdel "$VAR_B-p"
+            rm -rf /home/"$VAR_B"
+            rm -rf /var/run/screen/S-"$VAR_B-p"
+            rm -rf /var/run/uscreen/S-"$VAR_B-p"
         fi
-        if [ -d $LOGP/cache/$VAR_B$VAR_D ]; then
-	    cd $LOGP/cache
-	    rm $VAR_B$VAR_D
-        fi
-        cd $LOGP/cache
-        if [ -d $VAR_B$VAR_C ]; then
-	    rm -r $VAR_B$VAR_C
-        fi
-        if [ ! -d $VAR_C ]; then
-	    echo "$(date) - Folder /home/$VAR_B/$VAR_D/$VAR_C was deleted" >> $LOGP/logs/$LOGF.txt
+
+        [ -d "$LOGP/cache/$VAR_B$VAR_D" ] && rm -f "$LOGP/cache/$VAR_B$VAR_D"
+        [ -d "$LOGP/cache/$VAR_B$VAR_C" ] && rm -rf "$LOGP/cache/$VAR_B$VAR_C"
+
+        if [ ! -d "$VAR_C" ]; then
+            log_msg "Folder /home/$VAR_B/$VAR_D/$VAR_C was deleted"
         else
-	    echo "$(date) - Folder /home/$VAR_B/$VAR_D/$VAR_C cant be deleted" >> $LOGP/logs/$LOGF.txt
+            log_msg "Folder /home/$VAR_B/$VAR_D/$VAR_C could not be deleted"
         fi
     ;;
-    # FTP User anlegen
+    # FTP User Creation
     9)
-        uid=$(grep home/$VAR_B /etc/passwd | cut -d : -f3)
-	gid=$(grep home/$VAR_B /etc/passwd | cut -d : -f4)
-	/usr/bin/expect<<EOF
-        cd /etc/proftpd
-	spawn ftpasswd --passwd --name=$VAR_C --uid=$uid --gid=$gid --home=$VAR_E --shell=/bin/false
-	expect "Password:" {send "$VAR_D\r"}
-	expect "Re-type password:" {send "$VAR_D\r"}
-	expect eof
+        uid=$(grep "home/$VAR_B" /etc/passwd | cut -d : -f3)
+        gid=$(grep "home/$VAR_B" /etc/passwd | cut -d : -f4)
+        /usr/bin/expect <<EOF
+cd /etc/proftpd
+spawn ftpasswd --passwd --name=$VAR_C --uid=$uid --gid=$gid --home=$VAR_E --shell=/bin/false
+expect "Password:" {send "$VAR_D\r"}
+expect "Re-type password:" {send "$VAR_D\r"}
+expect eof
 EOF
-	ftpasswd --group --file=/etc/proftpd/ftpd.group --name=$VAR_C --gid=$gid --member=$VAR_C
-	echo "ID1"
+        ftpasswd --group --file=/etc/proftpd/ftpd.group --name=$VAR_C --gid=$gid --member=$VAR_C
+        echo "ID1"
     ;;
-    # FTP User bearbeiten
+
+    # FTP User Password Change
     10)
-	/usr/bin/expect<<EOF
-	cd /etc/proftpd
-	spawn ftpasswd --change-password --passwd --name=$VAR_C
-	expect "Password:" {send "$VAR_D\r"}
-	expect "Re-type password:" {send "$VAR_D\r"}
-	expect eof
+        /usr/bin/expect <<EOF
+cd /etc/proftpd
+spawn ftpasswd --change-password --passwd --name=$VAR_C
+expect "Password:" {send "$VAR_D\r"}
+expect "Re-type password:" {send "$VAR_D\r"}
+expect eof
 EOF
-	echo "ID1"
+        echo "ID1"
     ;;
-    # FTP User entfernen
+
+    # FTP User Deletion
     11)
         cd /etc/proftpd
-	ftpasswd --delete-user --passwd --name=$VAR_C
-	echo "ID1"
+        ftpasswd --delete-user --passwd --name=$VAR_C
+        echo "ID1"
     ;;
-    # Versionsausgabe und Screenlog
+
+    # TekBase Utility: Cleanup Logs, Restart Daemon, CPU/Memory Stats
     18)
-        if [ ! -n "$VAR_B" ]; then
-	    echo "8701"
-        fi
-
-        if [ "$VAR_B" = "scservlog" ]; then
-	    cd /home
-	    for FILE in $(find . -iname sc_serv.log -type f)
-	    do
-	        rm $FILE
-	    done
-        fi
-    
-        if [ "$VAR_B" = "sctranslog" ]; then
-	    cd /home
-	    for FILE in $(find . -iname sc_trans.log -type f)
-	    do
-	        rm $FILE
-	    done
-        fi
-
-        if [ "$VAR_B" = "screenlog" ]; then
-	    cd /home
-	    for FILE in $(find . -iname screenlog* -type f)
-	    do
-	        rm $FILE
-	    done
-        fi
-    
-        if [ "$VAR_B" = "restart" ]; then
-	    cd $LOGP/restart
-	    for FILE in $(find -type f)
-	    do
-	        $FILE
-	    done
-        fi
-
-        if [ "$VAR_B" = "daemon" ]; then
-	    check=$(ps aux | grep -v grep | grep -i tekbase_daemon)
-	    if [ ! -n "$check" ]; then
-	        check=$(ps aux | grep -v grep | grep -i "per -e use MIME::Base64")
-	        if [ ! -n "$check" ]; then
-	            ./server &
-	        fi
-	    fi
-        fi
-
-        if [ "$VAR_B" = "cpumem" ]; then
-	    check=$(ps x | grep -i "server${VAR_C}-X" | grep -v grep | sed -e 's#.*server'${VAR_C}'-X \.\(\)#\1#' | grep -v "sed -e")
-	    if [ -n "$check" ]; then
-	        pidone=$(ps x | grep -i "$check" | grep -vi screen | grep -v grep | awk '{print $1}')
-	        if [ -n "$pidone" ]; then
-		    let pidend=pidone+51
-		    while [ $pidone -lt $pidend ]; do
-		        chkpid=$(ps x | grep -i "${pidone} " | grep -v grep)
-		        if [ -n "$chkpid" ]; then
-			    chkmem=$(ps -p $pidone -o pmem --no-headers | awk '{print $1}')
-			    if [ "$chkmem" != "0.0" ] && [ "$chkmem" != "0.1" ] && [ "$chkmem" != "0.2" ]; then
-			        chkcpu=$(ps -p $pidone -o pcpu --no-headers | awk '{print $1}')
-			        chkfree=$(free -k | grep -i "mem" | awk '{print $2}')
-			        echo "$chkcpu;$chkmem;$chkfree"
-			        pidend=52
-			    fi
-		        fi
-		        let pidone=pidone+1
-		    done
-	        fi
-	    fi
-        fi
+        case "$VAR_B" in
+            "")
+                echo "8701"
+                ;;
+            "scservlog")
+                find /home -iname sc_serv.log -type f -exec rm {} \;
+                ;;
+            "sctranslog")
+                find /home -iname sc_trans.log -type f -exec rm {} \;
+                ;;
+            "screenlog")
+                find /home -iname screenlog* -type f -exec rm {} \;
+                ;;
+            "restart")
+                cd "$LOGP/restart"
+                find . -type f -exec bash {} \;
+                ;;
+            "daemon")
+                check=$(pgrep -f tekbase_daemon)
+                [ -z "$check" ] && check=$(pgrep -f "perl -e use MIME::Base64")
+                [ -z "$check" ] && ./server &
+                ;;
+            "cpumem")
+                check=$(ps x | grep -i "server${VAR_C}-X" | grep -v grep | sed -e "s#.*server${VAR_C}-X \.\(\)#\1#" | grep -v "sed -e")
+                if [ -n "$check" ]; then
+                    pidone=$(ps x | grep -i "$check" | grep -vi screen | grep -v grep | awk '{print $1}')
+                    if [ -n "$pidone" ]; then
+                        let pidend=pidone+51
+                        while [ $pidone -lt $pidend ]; do
+                            chkpid=$(ps x | grep -i "${pidone} " | grep -v grep)
+                            if [ -n "$chkpid" ]; then
+                                chkmem=$(ps -p $pidone -o pmem --no-headers | awk '{print $1}')
+                                if [[ "$chkmem" != "0.0" && "$chkmem" != "0.1" && "$chkmem" != "0.2" ]]; then
+                                    chkcpu=$(ps -p $pidone -o pcpu --no-headers | awk '{print $1}')
+                                    chkfree=$(free -k | grep -i "mem" | awk '{print $2}')
+                                    echo "$chkcpu;$chkmem;$chkfree"
+                                    break
+                                fi
+                            fi
+                            let pidone=pidone+1
+                        done
+                    fi
+                fi
+                ;;
+        esac
     ;;
-    # Autoupdater
+
+    # AutoUpdater Start
     19)
         screen -A -m -d -S tekautoup ./autoupdater
-        check=$(ps aux | grep -v grep | grep -i screen | grep -i tekautoup)
-        if [ ! -n "$check" ]; then
-	    echo "ID2"
-        else
-	    echo "ID1"
-        fi
+        check=$(pgrep -f "screen.*tekautoup")
+        [ -z "$check" ] && echo "ID2" || echo "ID1"
     ;;
-    # VServer Ausfuehrung
+    # VServer Management: delete, traffic, iplist
     24)
         if [ "$VAR_C" = "delete" ]; then
-	    check=$(vzctl status $VAR_B | grep -i running)
-	    if [ -n "$check" ]; then
-	        vzctl stop $VAR_B
-	    fi
-	    vzctl destroy $VAR_B
-	    if [ ! -f /etc/vz/conf/$VAR_B.conf ]; then
-	        echo "$(date) - VServer $VAR_B was deleted" >> $LOGP/logs/$LOGF.txt
-	    else
-	        echo "$(date) - VServer $VAR_B cant be deleted" >> $LOGP/logs/$LOGF.txt
-	    fi
-	    cd /etc/vz/conf
-	    rm $VAR_B.conf.destroyed
-	    if [ -d /usr/vz/$VAR_B ]; then
-	        cd /usr/vz
-	        rm -r $VAR_B
-	    fi
+            check=$(vzctl status "$VAR_B" | grep -i running)
+            [ -n "$check" ] && vzctl stop "$VAR_B"
+            vzctl destroy "$VAR_B"
+            if [ ! -f /etc/vz/conf/"$VAR_B".conf ]; then
+                echo "$(date) - VServer $VAR_B was deleted" >> "$LOGP/logs/$LOGF.txt"
+            else
+                echo "$(date) - VServer $VAR_B cant be deleted" >> "$LOGP/logs/$LOGF.txt"
+            fi
+            cd /etc/vz/conf
+            rm -f "$VAR_B.conf.destroyed"
+            [ -d /usr/vz/"$VAR_B" ] && rm -rf "/usr/vz/$VAR_B"
         fi
 
         if [ "$VAR_C" = "traffic" ]; then
-	    for i in $(./tekbase 24 99 iplist)
-	    do
-	        traffic=$(iptables -nvx -L FORWARD | grep " $i " | tr -s [:blank:] |cut -d' ' -f3| awk '{sum+=$1} END {print sum;}')
-	        if [ -n "$VAR_E" ]; then
-		    wget --post-data 'op=vtraffic&key='$VAR_B'&rid='$VAR_E'&vip='$i'&traffic='$traffic'' -O - $VAR_D/automated.php
-	        else
-		    wget --post-data 'op=vtraffic&key='$VAR_B'&vip='$i'&traffic='$traffic'' -O - $VAR_D/automated.php
-	        fi
-	    done
-	    iptables -Z
-	    for i in $(./tekbase 24 99 iplist); do iptables -D FORWARD -s $i; iptables -D FORWARD -d $i; done >/dev/null 2>&1
-	    for i in $(./tekbase 24 99 iplist); do iptables -A FORWARD -s $i; iptables -A FORWARD -d $i; done >/dev/null 2>&1
+            for ip in $(./tekbase 24 99 iplist); do
+                traffic=$(iptables -nvx -L FORWARD | grep " $ip " | tr -s ' ' | cut -d' ' -f3 | awk '{sum+=$1} END {print sum}')
+                if [ -n "$VAR_E" ]; then
+                    wget --post-data "op=vtraffic&key=$VAR_B&rid=$VAR_E&vip=$ip&traffic=$traffic" -O - "$VAR_D/automated.php"
+                else
+                    wget --post-data "op=vtraffic&key=$VAR_B&vip=$ip&traffic=$traffic" -O - "$VAR_D/automated.php"
+                fi
+            done
+            iptables -Z
+            for ip in $(./tekbase 24 99 iplist); do
+                iptables -D FORWARD -s "$ip"
+                iptables -D FORWARD -d "$ip"
+            done >/dev/null 2>&1
+            for ip in $(./tekbase 24 99 iplist); do
+                iptables -A FORWARD -s "$ip"
+                iptables -A FORWARD -d "$ip"
+            done >/dev/null 2>&1
         fi
 
         if [ "$VAR_C" = "iplist" ]; then
-	    vzlist -H -o ip
+            vzlist -H -o ip
         fi
     ;;
-    # Change files
+    # File permission adjustments
     28)
         if [ "$VAR_F" = "startscr" ]; then
-            cd /home/$VAR_B/$VAR_C/$VAR_D
-            for LINE in $(echo "$VAR_E" | sed -e 's/;/\n/g')
-            do
-	        chmod 777 $LINE
-	        if [ -d $LINE ]; then
-		    cd $LINE
-		    chmod 544 *
-		    cd /home/$VAR_B/$VAR_C/$VAR_D
-	        fi
+            cd /home/"$VAR_B"/"$VAR_C"/"$VAR_D" || exit
+            for LINE in $(echo "$VAR_E" | tr ';' '\n'); do
+                chmod 777 "$LINE"
+                if [ -d "$LINE" ]; then
+                    cd "$LINE" && chmod 544 * && cd - >/dev/null
+                fi
             done
         else
-	    newvar="startscr"
-	    screen -A -m -d -S $VAR_B$VAR_D-28 ./tekbase 28 $VAR_B $VAR_C $VAR_D $VAR_E $newvar
+            screen -A -m -d -S "${VAR_B}${VAR_D}-28" ./tekbase 28 "$VAR_B" "$VAR_C" "$VAR_D" "$VAR_E" "startscr"
         fi
     ;;
-    # Copy files
+
+    # Copy and protect files
     29)
         if [ "$VAR_F" = "startscr" ]; then
-            cd $LOGP/cache
-            mkdir -p $VAR_B$VAR_D
-            chmod 0777 $VAR_B$VAR_D
-            cd /home/$VAR_B/$VAR_C/$VAR_D
-            for LINE in $(echo "${VAR_E//;/$'\n'}")
-            do
-                if [ -d $LINE ]; then
-                    cp -r --parents $LINE $LOGP/cache/$VAR_B$VAR_D
+            cd "$LOGP/cache" || exit
+            mkdir -p "${VAR_B}${VAR_D}"
+            chmod 0777 "${VAR_B}${VAR_D}"
+            cd "/home/$VAR_B/$VAR_C/$VAR_D" || exit
+            while IFS= read -r LINE; do
+                if [ -d "$LINE" ]; then
+                    cp -r --parents "$LINE" "$LOGP/cache/${VAR_B}${VAR_D}"
+                elif [ -f "$LINE" ]; then
+                    cp --parents "$LINE" "$LOGP/cache/${VAR_B}${VAR_D}"
                 fi
-                if [ -f $LINE ]; then
-                    cp --parents $LINE $LOGP/cache/$VAR_B$VAR_D
-                fi
-            done
-            cd $LOGP/cache/$VAR_B$VAR_D
-            rm protect.md5
-            cd $LOGP/cache
-            tar -cf $VAR_B$VAR_D.tar $VAR_B$VAR_D
-            md5sum $VAR_B$VAR_D.tar | awk '{print $1}' > $LOGP/cache/$VAR_B$VAR_D/protect.md5
-            rm $VAR_B$VAR_D.tar
-            cd $LOGP/cache/$VAR_B$VAR_D
-            cp protect.md5 /home/$VAR_B/$VAR_C/$VAR_D/protect.md5
+            done <<< "$(echo "$VAR_E" | tr ';' '\n')"
+            cd "$LOGP/cache/${VAR_B}${VAR_D}" || exit
+            rm -f protect.md5
+            cd "$LOGP/cache" || exit
+            tar -cf "${VAR_B}${VAR_D}.tar" "${VAR_B}${VAR_D}"
+            md5sum "${VAR_B}${VAR_D}.tar" | awk '{print $1}' > "${LOGP}/cache/${VAR_B}${VAR_D}/protect.md5"
+            rm -f "${VAR_B}${VAR_D}.tar"
+            cp "${LOGP}/cache/${VAR_B}${VAR_D}/protect.md5" "/home/$VAR_B/$VAR_C/$VAR_D/"
         else
-            newvar="startscr"
-            screen -A -m -d -S $VAR_B$VAR_D-29 ./tekbase 29 $VAR_B $VAR_C $VAR_D $VAR_E $newvar
+            screen -A -m -d -S "${VAR_B}${VAR_D}-29" ./tekbase 29 "$VAR_B" "$VAR_C" "$VAR_D" "$VAR_E" "startscr"
         fi
     ;;
-    # Check MD5
+
+    # MD5 verification of protected files
     30)
-        dowmd5=$(cat $LOGP/cache/$VAR_B$VAR_D/protect.md5 | awk '{print $1}')
-        chkmd5=$(cat /home/$VAR_B/$VAR_C/$VAR_D/protect.md5 | awk '{print $1}')
-        if [ "$dowmd5" = "$chkmd5" ]; then
-            echo "ID1"
-        else
-            echo "ID2"
-        fi
+        dowmd5=$(awk '{print $1}' "$LOGP/cache/${VAR_B}${VAR_D}/protect.md5")
+        chkmd5=$(awk '{print $1}' "/home/$VAR_B/$VAR_C/$VAR_D/protect.md5")
+        [ "$dowmd5" = "$chkmd5" ] && echo "ID1" || echo "ID2"
     ;;
-    # Check Limit
+
+    # Check disk usage for folder
     31)
-        cd /home/$VAR_B/$VAR_C
-
-        if [ "$VAR_D" != "" ]; then
-	    cd /home/$VAR_B/$VAR_D
-        fi
-        if [ "$VAR_E" != "" ]; then
-	    cd /home/$VAR_B/$VAR_E
-        fi
-        if [ "$VAR_F" != "" ]; then
-	    cd /home/$VAR_B/$VAR_F
-        fi
-
-        echo "$(du -s | awk '{print $1}')"
+        target="/home/$VAR_B"
+        [ -n "$VAR_C" ] && target="$target/$VAR_C"
+        [ -n "$VAR_D" ] && target="/home/$VAR_B/$VAR_D"
+        [ -n "$VAR_E" ] && target="/home/$VAR_B/$VAR_E"
+        [ -n "$VAR_F" ] && target="/home/$VAR_B/$VAR_F"
+        du -s "$target" | awk '{print $1}'
     ;;
+
+    # List running processes
     32)
-        echo "$(ps aux --sort pid | grep -v "ps aux" | grep -v "awk {printf" | grep -v "tekbase" | grep -v "perl -e use MIME::Base64" | awk '{printf($1"%TD%")
-        printf($2"%TD%")
-        printf($3"%TD%")
-        printf($4"%TD%")
-        for (i=11;i<=NF;i++) {
-	    printf("%s ", $i);
-        }
-        print("%TEND%") }')"
+        ps aux --sort pid | grep -v "ps aux" | grep -v "awk {printf" | grep -v "tekbase" | grep -v "perl -e use MIME::Base64" | awk '{
+            printf($1"%TD%")
+            printf($2"%TD%")
+            printf($3"%TD%")
+            printf($4"%TD%")
+            for (i=11;i<=NF;i++) {
+                printf("%s ", $i)
+            }
+            print "%TEND%"
+        }'
     ;;
+
+    # Rebind chroot & execute tekbase inside
     33)
-        killall -w -q -u $VAR_B
-        home=$(grep $VAR_B /etc/passwd | cut -f 6 -d ":")
-        rsync -a --link-dest=/home/chroot/ /home/chroot/ $home/
-        grep $VAR_B /etc/passwd >> $home/etc/passwd
-        grep $VAR_B /etc/shadow >> $home/etc/shadow
-        cp /home/skripte/tekbase $home/
-        chown $VAR_B $home
-        mkdir -p $home/proc
-        umount $home/proc >/dev/null 2>&1
-        umount $home/dev >/dev/null 2>&1
-        mount proc -t proc $home/proc >/dev/null 2>&1
-        mount --bind /dev $home/dev
-        rm -rf $home$home
-        mkdir -p $home$home
-        rmdir $home$home
-        ln -s / $home$home
-        chroot $home su $VAR_B -c "./tekbase 9 '$VAR_C' '$VAR_D' '$VAR_E' '$VAR_F' '$VAR_G' '$VAR_H' '$VAR_I' '$VAR_J'"
-        echo "su $VAR_B -c \"./tekbase 9 '$VAR_C' '$VAR_D' '$VAR_E' '$VAR_F' '$VAR_G' '$VAR_H' '$VAR_I' '$VAR_J'\"" >> $LOGP/logs/tekbase2
+        killall -w -q -u "$VAR_B"
+        home=$(grep "$VAR_B" /etc/passwd | cut -d ":" -f6)
+        rsync -a --link-dest=/home/chroot/ /home/chroot/ "$home/"
+        grep "$VAR_B" /etc/passwd >> "$home/etc/passwd"
+        grep "$VAR_B" /etc/shadow >> "$home/etc/shadow"
+        cp /home/skripte/tekbase "$home/"
+        chown "$VAR_B" "$home"
+        mkdir -p "$home/proc"
+        umount "$home/proc" >/dev/null 2>&1
+        umount "$home/dev" >/dev/null 2>&1
+        mount proc -t proc "$home/proc" >/dev/null 2>&1
+        mount --bind /dev "$home/dev"
+        rm -rf "$home$home"
+        mkdir -p "$home$home"
+        rmdir "$home$home"
+        ln -s / "$home$home"
+        chroot "$home" su "$VAR_B" -c "./tekbase 9 '$VAR_C' '$VAR_D' '$VAR_E' '$VAR_F' '$VAR_G' '$VAR_H' '$VAR_I' '$VAR_J'"
+        echo "su $VAR_B -c \"./tekbase 9 '$VAR_C' '$VAR_D' '$VAR_E' '$VAR_F' '$VAR_G' '$VAR_H' '$VAR_I' '$VAR_J'\"" >> "$LOGP/logs/tekbase2"
     ;;
+
+    # List Apache processes
     34)
-        ps aux | grep -i apache | awk '{printf ($1"%TD%);
-        for(i=11;i<=NF;i++) {
-	    printf("%s ", $i);
-        }
-        printf("\n") }'
+        ps aux | grep -i apache | awk '{
+            printf($1"%TD%")
+            for (i=11;i<=NF;i++) {
+                printf("%s ", $i)
+            }
+            print ""
+        }'
     ;;
+
+    # Report disk usage (soft quota)
     35)
-	cd /home
-	for MEMBER in $(ls -d */ | sed 's#/##')
-	do
-	    if [ -d $MEMBER/$VAR_B ]; then
-	        cd /home/$MEMBER/$VAR_B
-		for SERVER in $(ls -d */ | sed 's#/##')
-		do
-		    quota=$(du -s | awk '{print $1}')
-		    wget --post-data 'op=softlimit&key='$VAR_C'&member='$MEMBER'&typ='$VAR_B'&path='$SERVER'&quota='$quota'' -O - $VAR_D/automated.php
-		done
-		cd /home
-	    fi
-	done
+        cd /home || exit
+        for MEMBER in */; do
+            MEMBER=${MEMBER%/}
+            if [ -d "$MEMBER/$VAR_B" ]; then
+                cd "/home/$MEMBER/$VAR_B" || continue
+                for SERVER in */; do
+                    SERVER=${SERVER%/}
+                    quota=$(du -s | awk '{print $1}')
+                    wget --post-data "op=softlimit&key=$VAR_C&member=$MEMBER&typ=$VAR_B&path=$SERVER&quota=$quota" -O - "$VAR_D/automated.php"
+                done
+            fi
+        done
     ;;
 esac
-
 
 exit 0
